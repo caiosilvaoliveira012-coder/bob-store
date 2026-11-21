@@ -1,145 +1,289 @@
 
---[[
-    BOB AUTO JOINER V1.0
-    Roblox Public Server Finder
-    PlaceId: 107778070777162
-]]
+-- BOB AUTO JOINER V3.0
+-- Server Finder + Auto Load
+-- PlaceId: 107778070777162
 
+local Players = game:GetService("Players")
 local HttpService = game:GetService("HttpService")
 local TeleportService = game:GetService("TeleportService")
-local Players = game:GetService("Players")
+local Player = Players.LocalPlayer
 
-local PlaceId = 107778070777162
-local MaxPages = 5
+local PLACE_ID = 107778070777162
+local RAW_URL = "https://raw.githubusercontent.com/caiosilvaoliveira012-coder/bob-store/main/BobAutoJoiner.lua"
 
-local gui = Instance.new("ScreenGui")
-gui.Name = "BobAutoJoiner"
-gui.ResetOnSpawn = false
+local Busy = false
+local AutoLoad = true
+local Minimized = false
 
-local frame = Instance.new("Frame")
-frame.Size = UDim2.fromOffset(340, 390)
-frame.Position = UDim2.new(0.5, -170, 0.5, -195)
-frame.BackgroundColor3 = Color3.fromRGB(20, 20, 27)
-frame.Parent = gui
+-- HTTP compatível com ambientes que oferecem request
+local function Request(url)
+    local req = request or http_request
 
-local corner = Instance.new("UICorner")
-corner.CornerRadius = UDim.new(0, 12)
-corner.Parent = frame
+    if not req and syn then
+        req = syn.request
+    end
 
-local title = Instance.new("TextLabel")
-title.Size = UDim2.new(1, 0, 0, 45)
-title.BackgroundTransparency = 1
-title.Text = "BOB AUTO JOINER V1.0"
-title.TextColor3 = Color3.fromRGB(255, 255, 255)
-title.TextSize = 18
-title.Font = Enum.Font.GothamBold
-title.Parent = frame
+    if req then
+        local response = req({
+            Url = url,
+            Method = "GET"
+        })
 
-local search = Instance.new("TextButton")
-search.Size = UDim2.new(1, -30, 0, 38)
-search.Position = UDim2.fromOffset(15, 55)
-search.BackgroundColor3 = Color3.fromRGB(110, 70, 255)
-search.Text = "BUSCAR SERVIDORES"
-search.TextColor3 = Color3.new(1, 1, 1)
-search.Font = Enum.Font.GothamBold
-search.TextSize = 13
-search.Parent = frame
-
-local list = Instance.new("ScrollingFrame")
-list.Size = UDim2.new(1, -30, 1, -115)
-list.Position = UDim2.fromOffset(15, 105)
-list.BackgroundColor3 = Color3.fromRGB(29, 29, 38)
-list.BorderSizePixel = 0
-list.ScrollBarThickness = 4
-list.CanvasSize = UDim2.new(0, 0, 0, 0)
-list.Parent = frame
-
-local layout = Instance.new("UIListLayout")
-layout.Padding = UDim.new(0, 7)
-layout.Parent = list
-
-local function clearList()
-    for _, item in ipairs(list:GetChildren()) do
-        if item:IsA("TextButton") then
-            item:Destroy()
+        if response.StatusCode ~= 200 then
+            error("HTTP " .. tostring(response.StatusCode))
         end
+
+        return response.Body
+    end
+
+    return game:HttpGet(url)
+end
+
+-- Interface
+pcall(function()
+    game:GetService("CoreGui"):FindFirstChild("BobAutoJoinerV3"):Destroy()
+end)
+
+local Gui = Instance.new("ScreenGui")
+Gui.Name = "BobAutoJoinerV3"
+Gui.ResetOnSpawn = false
+
+local Main = Instance.new("Frame")
+Main.Size = UDim2.fromOffset(300, 205)
+Main.Position = UDim2.new(0.5, -150, 0.5, -102)
+Main.BackgroundColor3 = Color3.fromRGB(20, 20, 28)
+Main.BorderSizePixel = 0
+Main.Parent = Gui
+
+Instance.new("UICorner", Main).CornerRadius = UDim.new(0, 12)
+
+local function Button(parent, text, pos, size, color)
+    local b = Instance.new("TextButton")
+    b.Text = text
+    b.Position = pos
+    b.Size = size
+    b.BackgroundColor3 = color
+    b.TextColor3 = Color3.new(1,1,1)
+    b.Font = Enum.Font.GothamBold
+    b.TextSize = 13
+    b.Parent = parent
+    Instance.new("UICorner", b).CornerRadius = UDim.new(0,8)
+    return b
+end
+
+local Title = Instance.new("TextLabel")
+Title.Size = UDim2.new(1, -50, 0, 38)
+Title.Position = UDim2.fromOffset(12, 0)
+Title.BackgroundTransparency = 1
+Title.Text = "BOB AUTO JOINER V3.0"
+Title.TextColor3 = Color3.new(1,1,1)
+Title.Font = Enum.Font.GothamBold
+Title.TextSize = 15
+Title.TextXAlignment = Enum.TextXAlignment.Left
+Title.Parent = Main
+
+local Minimize = Button(
+    Main, "−",
+    UDim2.new(1,-40,0,5),
+    UDim2.fromOffset(30,28),
+    Color3.fromRGB(55,55,70)
+)
+
+local Join = Button(
+    Main, "AUTO JOINER",
+    UDim2.fromOffset(12,45),
+    UDim2.new(1,-24,0,43),
+    Color3.fromRGB(105,70,255)
+)
+
+local Load = Button(
+    Main, "AUTO LOAD: ON",
+    UDim2.fromOffset(12,97),
+    UDim2.new(1,-24,0,35),
+    Color3.fromRGB(35,135,85)
+)
+
+local Status = Instance.new("TextLabel")
+Status.Size = UDim2.new(1,-24,0,35)
+Status.Position = UDim2.fromOffset(12,145)
+Status.BackgroundTransparency = 1
+Status.Text = "Pronto para procurar"
+Status.TextColor3 = Color3.fromRGB(190,190,205)
+Status.Font = Enum.Font.Gotham
+Status.TextSize = 11
+Status.TextWrapped = true
+Status.Parent = Main
+
+local Icon = Button(
+    Gui, "BOB",
+    UDim2.new(1,-58,0.5,-24),
+    UDim2.fromOffset(48,48),
+    Color3.fromRGB(105,70,255)
+)
+Icon.Visible = false
+Instance.new("UICorner", Icon).CornerRadius = UDim.new(1,0)
+
+local function SetStatus(msg)
+    Status.Text = msg
+end
+
+Minimize.MouseButton1Click:Connect(function()
+    Main.Visible = false
+    Icon.Visible = true
+end)
+
+Icon.MouseButton1Click:Connect(function()
+    Main.Visible = true
+    Icon.Visible = false
+end)
+
+Load.MouseButton1Click:Connect(function()
+    AutoLoad = not AutoLoad
+
+    Load.Text = "AUTO LOAD: " .. (AutoLoad and "ON" or "OFF")
+    Load.BackgroundColor3 = AutoLoad
+        and Color3.fromRGB(35,135,85)
+        or Color3.fromRGB(130,55,55)
+end)
+
+-- Buscar servidores públicos
+local function FindServer()
+    local cursor = nil
+    local empty = {}
+    local available = {}
+    local seen = {}
+
+    for page = 1, 5 do
+        SetStatus("Buscando servidores... página " .. page)
+
+        local url = "https://games.roblox.com/v1/games/"
+            .. PLACE_ID
+            .. "/servers/Public?sortOrder=Asc&limit=100"
+
+        if cursor then
+            url = url .. "&cursor=" .. HttpService:UrlEncode(cursor)
+        end
+
+        local body = Request(url)
+        local data = HttpService:JSONDecode(body)
+
+        if type(data.data) ~= "table" then
+            error("Resposta inválida da API")
+        end
+
+        for _, server in ipairs(data.data) do
+            if server.id
+                and server.id ~= game.JobId
+                and not seen[server.id]
+                and server.playing < server.maxPlayers then
+
+                seen[server.id] = true
+
+                if server.playing == 0 then
+                    table.insert(empty, server)
+                else
+                    table.insert(available, server)
+                end
+            end
+        end
+
+        cursor = data.nextPageCursor
+
+        if not cursor then
+            break
+        end
+    end
+
+    if #empty > 0 then
+        return empty[math.random(1, #empty)]
+    end
+
+    table.sort(available, function(a,b)
+        return a.playing < b.playing
+    end)
+
+    return available[1]
+end
+
+-- Preparar recarga após teleporte iniciado pelo script
+local function PrepareAutoLoad()
+    if not AutoLoad then
+        return
+    end
+
+    local queue = queue_on_teleport
+        or queueonteleport
+        or (syn and syn.queue_on_teleport)
+
+    if queue then
+        pcall(function()
+            queue('loadstring(game:HttpGet("' .. RAW_URL .. '"))()')
+        end)
+    else
+        SetStatus("Executor sem suporte a Auto Load")
     end
 end
 
-local function addServer(server)
-    local button = Instance.new("TextButton")
-    button.Size = UDim2.new(1, -10, 0, 48)
-    button.BackgroundColor3 = Color3.fromRGB(43, 43, 56)
-    button.TextColor3 = Color3.new(1, 1, 1)
-    button.TextSize = 12
-    button.Font = Enum.Font.Gotham
-    button.Text = "Jogadores: " .. server.playing ..
-        "/" .. server.maxPlayers
-    button.Parent = list
+-- Teleporte
+Join.MouseButton1Click:Connect(function()
+    if Busy then return end
 
-    button.MouseButton1Click:Connect(function()
-        TeleportService:TeleportToPlaceInstance(
-            PlaceId,
-            server.id,
-            Players.LocalPlayer
-        )
-    end)
-end
-
-search.MouseButton1Click:Connect(function()
-    clearList()
-    search.Text = "BUSCANDO..."
+    Busy = true
+    Join.Text = "PROCURANDO..."
 
     task.spawn(function()
-        local cursor = ""
-        local servers = {}
+        local success, server = pcall(FindServer)
 
-        for page = 1, MaxPages do
-            local url = "https://games.roblox.com/v1/games/"
-                .. PlaceId .. "/servers/Public?sortOrder=Asc&limit=100"
-
-            if cursor ~= "" then
-                url = url .. "&cursor=" .. HttpService:UrlEncode(cursor)
-            end
-
-            local success, response = pcall(function()
-                return HttpService:JSONDecode(
-                    game:HttpGet(url)
-                )
-            end)
-
-            if not success or not response then
-                break
-            end
-
-            for _, server in ipairs(response.data or {}) do
-                if server.playing < server.maxPlayers
-                and server.id ~= game.JobId then
-                    table.insert(servers, server)
-                end
-            end
-
-            cursor = response.nextPageCursor or ""
-
-            if cursor == "" then
-                break
-            end
+        if not success then
+            SetStatus("Erro na busca: " .. tostring(server))
+            Join.Text = "TENTAR NOVAMENTE"
+            Busy = false
+            return
         end
 
-        table.sort(servers, function(a, b)
-            return a.playing < b.playing
+        if not server then
+            SetStatus("Nenhum servidor disponível")
+            Join.Text = "TENTAR NOVAMENTE"
+            Busy = false
+            return
+        end
+
+        SetStatus("Encontrado: " .. server.playing .. " jogadores")
+        Join.Text = "CONECTANDO..."
+
+        PrepareAutoLoad()
+
+        local teleported, err = pcall(function()
+            TeleportService:TeleportToPlaceInstance(
+                PLACE_ID,
+                server.id,
+                Player
+            )
         end)
 
-        for _, server in ipairs(servers) do
-            addServer(server)
+        if not teleported then
+            SetStatus("Erro no teleporte: " .. tostring(err))
+            Join.Text = "TENTAR NOVAMENTE"
+            Busy = false
+            return
         end
 
-        list.CanvasSize = UDim2.new(
-            0, 0, 0, layout.AbsoluteContentSize.Y + 10
-        )
-
-        search.Text = "BUSCAR NOVAMENTE"
+        SetStatus("Solicitação de teleporte enviada")
     end)
 end)
 
-gui.Parent = Players.LocalPlayer:WaitForChild("PlayerGui")
+TeleportService.TeleportInitFailed:Connect(function(player, result, message)
+    if player == Player then
+        Busy = false
+        Join.Text = "TENTAR NOVAMENTE"
+        SetStatus("Falha no teleporte: " .. tostring(message))
+    end
+end)
+
+local parented = pcall(function()
+    Gui.Parent = game:GetService("CoreGui")
+end)
+
+if not parented or not Gui.Parent then
+    Gui.Parent = Player:WaitForChild("PlayerGui")
+end
